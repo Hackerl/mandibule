@@ -27,6 +27,7 @@ unsigned long mandibule_beg(int aligned)
 #include "fakestack.h"
 #include "ptinject.h"
 #include "shargs.h"
+#include "spread.h"
 
 // forward declarations
 unsigned long mandibule_end(void);
@@ -84,14 +85,21 @@ void _main(unsigned long * sp)
     size_t          inj_opts    = mandibule_beg(0) - mandibule_beg(1);
     uint8_t *       inj_code    = malloc(inj_size);
 
+    void *          spread_addr   = (void*)spread_beg;
+    size_t          spread_size   = (size_t)spread_end - (size_t)spread_addr;
+    size_t          spread_off    = (size_t)slip_start - (size_t)spread_addr;
+    uint8_t *       spread_code   = malloc(spread_size);
+
     // parse arguments & build shared arguments struct
     args = _ashared_parse(ac, av);
     if(inj_opts < args->size_used)
         error("> shared arguments too big (%d/ max %d)\n", args->size_max, inj_opts);
 
     // prepare code that will be injected into the process
-    if(!inj_code)
+    if(!inj_code || !spread_code)
         error("> malloc for injected code failed\n");
+
+    memcpy(spread_code, spread_addr, spread_size);
     memcpy(inj_code, inj_addr, inj_size);
     memcpy(inj_code, args, args->size_used);
 
@@ -104,12 +112,22 @@ void _main(unsigned long * sp)
     }
     else
     {
+        void * result;
+        if(pt_inject_returnable(args->pid, spread_code, spread_size, spread_off, &result) < 0)
+            error("> failed to inject shellcode into pid %d\n", args->pid);
+
+        printf("> malloc heap: %x\n", result);
+
         // inject our own code into <pid> & execute code at <inj_off>
-        if(pt_inject(args->pid, inj_code, inj_size, inj_off) < 0)
+        if(pt_inject(args->pid, inj_code, inj_size, inj_off, result) < 0)
             error("> failed to inject shellcode into pid %d\n", args->pid);
 
         printf("> successfully injected shellcode into pid %d\n", args->pid);
     }
+
+    free(spread_code);
+    free(inj_code);
+
     _exit(0);
 }
 

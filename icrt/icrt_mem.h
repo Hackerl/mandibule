@@ -8,6 +8,9 @@
 // use mmap for every required block
 // block header = [unsigned long user_size] [unsigned long allocd_size]
 
+#ifndef _ICRT_MEM_H
+#define _ICRT_MEM_H
+
 // some defines
 #define IXTY_PAGE_SIZE          0x1000
 #define IXTY_SIZE_USER(ptr)     (*(unsigned long *) ((unsigned long)(ptr) - 2 * sizeof(unsigned long)))
@@ -69,3 +72,4 @@ void free(void * ptr)
     _munmap(page, IXTY_SIZE_ALLOC(ptr));
 }
 
+#endif
