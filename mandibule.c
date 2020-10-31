@@ -18,7 +18,10 @@ unsigned long mandibule_beg(int aligned)
 {
     if(!aligned)
         return (unsigned long)mandibule_beg;
-    return (unsigned long)mandibule_beg - ((unsigned long)mandibule_beg % 0x1000);
+
+    unsigned long align_size = (unsigned long)mandibule_beg % 0x1000;
+
+    return (unsigned long)mandibule_beg - (align_size == 0 ? 0x1000 : align_size);
 }
 
 // include minimal inline c runtime + support code
