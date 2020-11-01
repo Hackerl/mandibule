@@ -14,6 +14,7 @@
 #include <asm/ptrace.h>
 #include <sys/user.h>
 #include <sys/uio.h>
+#include <sys/signal.h>
 
 // ======================================================================== //
 // arch specific defines
@@ -208,6 +209,12 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
         if(_wait4(pid, &s, 0, NULL) < 0 || WIFEXITED(s))
             _pt_fail("> wait4 error\n");
 
+        if (WIFSTOPPED(s) && WSTOPSIG(s) == SIGSEGV)
+        {
+            printf("> segmentation fault\n");
+            break;
+        }
+
         if(_pt_getregs(pid, &regs))
             return -1;
 
@@ -216,7 +223,6 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
             _pt_cancel_syscall(pid);
             break;
         }
-
     }
 
     printf("> shellcode executed!\n");
