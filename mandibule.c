@@ -146,7 +146,8 @@ void payload_loadelf(ashared_t * args)
     char **         av;
     char **         env;
     uint8_t         fakestack[4096 * 16];
-    uint8_t *       stackptr = fakestack + sizeof(fakestack);
+    uint8_t *       stack_top = fakestack + sizeof(fakestack);
+    uint8_t *       stackptr = NULL;
     unsigned long   eop;
     unsigned long   base_addr;
 
@@ -184,7 +185,11 @@ void payload_loadelf(ashared_t * args)
 
     // build a stack for loader entry
     memset(fakestack, 0, sizeof(fakestack));
-    stackptr = fake_stack(stackptr, args->count_arg, av, env, (unsigned long *)auxv_buf);
+    stackptr = fake_stack(stack_top, args->count_arg, av, env, (unsigned long *)auxv_buf);
+
+    // align stack
+    stackptr = fake_stack_align(stackptr, stack_top);
+    printf("> fake stack ptr: %x", stackptr);
 
     // all done
     printf("> starting ...\n\n");
