@@ -202,15 +202,17 @@ void payload_loadelf(ashared_t * args)
 
     printf("> stack ptr: %x\n", stackptr);
 
+    free(auxv_buf);
+    free(av);
+    free(env);
+
     // all done
     printf("> starting ...\n\n");
     FIX_SP_JMP(stackptr, eop);
 
     // never reached if everything goes well
     printf("> returned from loader\n");
-    free(auxv_buf);
-    free(av);
-    free(env);
+
     _exit(1);
 }
 
