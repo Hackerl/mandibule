@@ -43,25 +43,6 @@
     }                                           \
 }
 
-// align 16 byte
-// issue: https://github.com/ixty/mandibule/issues/3
-static inline uint8_t * fake_stack_align(uint8_t * sp, const uint8_t * top)
-{
-    unsigned long align = (unsigned long)sp % 16;
-
-    if (!align)
-        return sp;
-
-    unsigned long length = top - sp;
-
-    for (unsigned long i = 0; i <= length; i++)
-    {
-        sp[i - align] = sp[i];
-    }
-
-    return sp - align;
-}
-
 static inline uint8_t * fake_stack(uint8_t * sp, int ac, char ** av, char ** env, unsigned long * auxv)
 {
     uint8_t *   env_ptrs[256];

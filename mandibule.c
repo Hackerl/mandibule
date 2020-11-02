@@ -187,9 +187,19 @@ void payload_loadelf(ashared_t * args)
     memset(fakestack, 0, sizeof(fakestack));
     stackptr = fake_stack(stack_top, args->count_arg, av, env, (unsigned long *)auxv_buf);
 
-    // align stack
-    stackptr = fake_stack_align(stackptr, stack_top);
-    printf("> fake stack ptr: %x\n", stackptr);
+    // align 16 byte
+    // issue: https://github.com/ixty/mandibule/issues/3
+    unsigned long align = (unsigned long)stackptr % 16;
+
+    if (align)
+    {
+        printf("> align stack ptr: %x\n", stackptr);
+
+        memset(fakestack, 0, sizeof(fakestack));
+        stackptr = fake_stack(stack_top - align, args->count_arg, av, env, (unsigned long *)auxv_buf);
+    }
+
+    printf("> stack ptr: %x\n", stackptr);
 
     // all done
     printf("> starting ...\n\n");
