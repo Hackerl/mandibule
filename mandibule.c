@@ -119,6 +119,9 @@ void _main(unsigned long * sp)
         if(pt_inject_returnable(args->pid, spread_code, spread_size, spread_off, &result) < 0)
             error("> failed to inject shellcode into pid %d\n", args->pid);
 
+        if (!result)
+            error("> failed to malloc heap\n");
+
         printf("> malloc heap: %x\n", result);
 
         // inject our own code into <pid> & execute code at <inj_off>

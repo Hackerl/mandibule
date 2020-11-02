@@ -209,7 +209,7 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
         if(_wait4(pid, &s, 0, NULL) < 0 || WIFEXITED(s))
             _pt_fail("> wait4 error\n");
 
-        if (WIFSTOPPED(s) && WSTOPSIG(s) == SIGSEGV)
+        if (WSTOPSIG(s) == SIGSEGV)
         {
             printf("> segmentation fault\n");
             break;
@@ -302,11 +302,14 @@ int pt_inject_returnable(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t star
 
     printf("> shellcode executed!\n");
 
-    // get return code
-    if(_pt_getregs(pid, &regs_finish))
-        return -1;
+    if (WSTOPSIG(s) != SIGSEGV)
+    {
+        // get return code
+        if(_pt_getregs(pid, &regs_finish))
+            return -1;
 
-    *result = (void *)regs_finish.REG_AC;
+        *result = (void *)regs_finish.REG_AC;
+    }
 
     // restore reg & mem backup
     if(_pt_write(pid, (void*)rvm_a, mem_backup, sc_len))
