@@ -56,7 +56,7 @@ int read_file(char * path, uint8_t ** out_buf, size_t * out_len)
     *out_len = fs;
 
     // allocate mem
-    if((*out_buf = realloc(0, fs)) == NULL)
+    if((*out_buf = malloc(fs)) == NULL)
         goto exit;
 
     // read file

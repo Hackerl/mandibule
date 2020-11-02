@@ -131,6 +131,7 @@ void _main(unsigned long * sp)
         printf("> successfully injected shellcode into pid %d\n", args->pid);
     }
 
+    free(args);
     free(spread_code);
     free(inj_code);
 

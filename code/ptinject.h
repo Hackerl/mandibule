@@ -238,6 +238,8 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
     if(_ptrace(PTRACE_DETACH, pid, NULL, NULL) < 0)
         _pt_fail("> _pt_detach error\n");
 
+    free(mem_backup);
+
     return 0;
 }
 
@@ -321,6 +323,8 @@ int pt_inject_returnable(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t star
     // all done, detach now
     if(_ptrace(PTRACE_DETACH, pid, NULL, NULL) < 0)
         _pt_fail("> _pt_detach error\n");
+
+    free(mem_backup);
 
     return 0;
 }
