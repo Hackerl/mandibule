@@ -167,6 +167,8 @@ static inline int map_elf(char * path, unsigned long base_mod, unsigned long * a
         set_auxv(auxv, AT_BASE,  base_seg);
     }
 
+    free(elf_buf);
+
     *out_eop = eop_ldr ? eop_ldr : eop_elf;
     printf("> eop 0x%llx\n", *out_eop);
     return 0;

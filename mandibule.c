@@ -189,7 +189,7 @@ void payload_loadelf(ashared_t * args)
 
     // align stack
     stackptr = fake_stack_align(stackptr, stack_top);
-    printf("> fake stack ptr: %x", stackptr);
+    printf("> fake stack ptr: %x\n", stackptr);
 
     // all done
     printf("> starting ...\n\n");
