@@ -31,6 +31,7 @@ x86: clean
 amd64: x86_64
 x86_64: clean
 	$(CC) $(CFLAGS) $(PORTABLE) -nostdlib -o mandibule mandibule.c
+	$(CC) $(CFLAGS) $(PORTABLE) -nostdlib -Wl,--no-dynamic-linker -o pyinject samples/pyinject.c
 	$(CC) $(CFLAGS) $(PORTABLE) -o toinject samples/toinject.c
 	$(CC) $(CFLAGS) -o target samples/target.c
 

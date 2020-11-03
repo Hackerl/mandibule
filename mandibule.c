@@ -8,10 +8,7 @@
 // it includes directly all other code to be able to wrap all generated code
 // between start/end boundaries
 
-#include <stdint.h>
 #include <stdlib.h>
-#include <stdarg.h>
-#include <linux/unistd.h>
 
 // first function in generated code - returns its own address aligned to page size
 unsigned long mandibule_beg(int aligned)

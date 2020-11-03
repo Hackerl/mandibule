@@ -8,6 +8,9 @@
 #ifndef _ICRT_STD_H
 #define _ICRT_STD_H
 
+#include <stdarg.h>
+#include <stdint.h>
+
 void memset(void * dst, unsigned char c, unsigned int len)
 {
     unsigned char * p = (unsigned char *) dst;
