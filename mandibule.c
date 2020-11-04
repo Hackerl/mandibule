@@ -28,6 +28,7 @@ unsigned long mandibule_beg(int aligned)
 #include "ptinject.h"
 #include "shargs.h"
 #include "spread.h"
+#include "shrink.h"
 
 // forward declarations
 unsigned long mandibule_end(void);
@@ -140,6 +141,15 @@ void _main(unsigned long * sp)
             pt_detach(args->pid, &regs_backup);
             error("> failed to inject shellcode into pid %d\n", args->pid);
         }
+
+        if(pt_inject_returnable(args->pid, (void*)shrink_beg, (size_t)(shrink_end - shrink_beg),
+                                (size_t)(shrink_start - shrink_beg), NULL, result, NULL, &regs_backup) < 0)
+        {
+            pt_detach(args->pid, &regs_backup);
+            error("> failed to free heap");
+        }
+
+        printf("> free heap: 0x%x\n", result);
 
         if (pt_detach(args->pid, &regs_backup) < 0)
             error("> failed to detach pid %d\n", args->pid);

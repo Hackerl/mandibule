@@ -325,7 +325,10 @@ int pt_inject_returnable(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t star
         return -1;
     }
 
-    *result = (void *)regs_finish.REG_AC;
+    if (result)
+    {
+        *result = (void *)regs_finish.REG_AC;
+    }
 
     return 0;
 }
