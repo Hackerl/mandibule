@@ -9,8 +9,13 @@ typedef int (*FUNC_PyRun_SimpleString)(const char *command);
 typedef int (*FUNC_PyGILState_Ensure)();
 typedef void (*FUNC_PyGILState_Release)(int);
 
-int main() {
+int main(int ac, char ** av, char ** env) {
     printf("> inject python\n");
+
+    if (ac < 2) {
+        printf("> need python command");
+        return 0;
+    }
 
     int fd = _open("/proc/self/exe", O_RDONLY, 0);
 
@@ -134,7 +139,7 @@ int main() {
 
     if (PyGILState_Ensure && PyRun_SimpleString && PyGILState_Release) {
         int state = PyGILState_Ensure();
-        PyRun_SimpleString("print('> message from python')");
+        PyRun_SimpleString(av[1]);
         PyGILState_Release(state);
     }
 
@@ -144,7 +149,11 @@ int main() {
 }
 
 void _main(unsigned long * sp) {
-    _exit(main());
+    int ac = *sp;
+    char **av = (char **)(sp + 1);
+    char **env = av + ac + 1;
+
+    _exit(main(ac, av, env));
 }
 
 void _start(void) {

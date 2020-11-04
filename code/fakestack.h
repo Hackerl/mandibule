@@ -45,10 +45,12 @@
 
 static inline uint8_t * fake_stack(uint8_t * sp, int ac, char ** av, char ** env, unsigned long * auxv)
 {
-    uint8_t *   env_ptrs[256];
+    uint8_t *   av_ptr[256];
+    uint8_t *   env_ptr[256];
     int         env_max = 0;
-    char *      av_0    = NULL;
-    memset(env_ptrs, 0, sizeof(env_ptrs));
+
+    memset(env_ptr, 0, sizeof(env_ptr));
+    memset(av_ptr, 0, sizeof(av_ptr));
 
     // align stack
     FSTACK_PUSH_STR(sp, "");
@@ -57,18 +59,19 @@ static inline uint8_t * fake_stack(uint8_t * sp, int ac, char ** av, char ** env
     while(*env && env_max < 254)
     {
         FSTACK_PUSH_STR(sp, *env);
-        env_ptrs[env_max++] = sp;
+        env_ptr[env_max++] = sp;
         env ++;
     }
 
     // add to envdata
     FSTACK_PUSH_STR(sp, "MANMAP=1");
-    env_ptrs[env_max++] = sp;
+    env_ptr[env_max++] = sp;
 
     // argv data
-    for(int i=0; i<ac; i++)
+    for(int i=0; i<ac; i++) {
         FSTACK_PUSH_STR(sp, av[ac - i - 1]);
-    av_0 = (char*)sp;
+        av_ptr[i] = sp;
+    }
 
     // auxv
     FSTACK_PUSH_AUXV(sp, auxv);
@@ -76,12 +79,12 @@ static inline uint8_t * fake_stack(uint8_t * sp, int ac, char ** av, char ** env
     // envp
     FSTACK_PUSH_LONG(sp, 0);
     for(int i=0; i<env_max; i++)
-        FSTACK_PUSH_LONG(sp, (unsigned long)env_ptrs[i]);
+        FSTACK_PUSH_LONG(sp, (unsigned long)env_ptr[i]);
 
     // argp
     FSTACK_PUSH_LONG(sp, 0);
     for(int i=0; i<ac; i++)
-        FSTACK_PUSH_LONG(sp, (unsigned long)av_0 + (ac - i - 1) * sizeof(unsigned long));
+        FSTACK_PUSH_LONG(sp, (unsigned long)av_ptr[i]);
     // argc
     FSTACK_PUSH_LONG(sp, ac);
 
