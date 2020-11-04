@@ -44,9 +44,12 @@ static inline void * malloc_inline(size_t size)
 }
 
 // malloc memory in remote process
-void *spread_main()
+void *spread_main(unsigned long size)
 {
-    void * mem = malloc_inline(0x10000);
+    if (!size)
+        return NULL;
+
+    void * mem = malloc_inline(size);
 
     if (!mem)
         return NULL;
@@ -57,7 +60,7 @@ void *spread_main()
     return mem;
 }
 
-INJ_ENTRY(slip_start, spread_main)
+INJ_ENTRY(spread_start, spread_main)
 
 void spread_end() {};
 

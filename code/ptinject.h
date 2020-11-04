@@ -30,6 +30,7 @@
     #define REG_TYPE    user_regs_struct
     #define REG_PC      rip
     #define REG_AC      rax
+    #define REG_ARG     rdi
     #define PC_OFF      2
     #define REG_SYSCALL orig_rax
 
@@ -143,41 +144,59 @@ int _pt_cancel_syscall(int pid)
     return 0;
 }
 
+int pt_attach(pid_t pid, struct REG_TYPE *regs_backup)
+{
+    int s = 0;
+
+    if(_ptrace(PTRACE_ATTACH, pid, NULL, NULL) < 0)
+        _pt_fail("> PTRACE_ATTACH error");
+
+    if(_wait4(pid, &s, WUNTRACED, NULL) != pid)
+        _pt_fail("> wait4(%d) error\n", pid);
+
+    printf("> success attaching to pid %d\n", pid);
+
+    if(_pt_getregs(pid, regs_backup))
+        return -1;
+
+    printf("> backed up registers\n");
+
+    return 0;
+}
+
+int pt_detach(pid_t pid, struct REG_TYPE *regs_backup)
+{
+    if(_pt_setregs(pid, regs_backup))
+        return -1;
+
+    printf("> restored registers\n");
+
+    // all done, detach now
+    if(_ptrace(PTRACE_DETACH, pid, NULL, NULL) < 0)
+        _pt_fail("> _pt_detach error\n");
+
+    printf("> success detach from pid %d\n", pid);
+
+    return 0;
+}
+
 // inject shellcode via ptrace into remote process
-int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, void * inj_address)
+int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, void * inj_address,
+              void *arg, struct REG_TYPE *regs_backup)
 {
     struct REG_TYPE regs;
-    struct REG_TYPE regs_backup;
     unsigned long   rvm_a = (unsigned long)inj_address;
     size_t          rvm_l = sc_len;
     uint8_t *       mem_backup = NULL;
     int             s;
 
-    memset(&regs, 0, sizeof(regs));
-    memset(&regs_backup, 0, sizeof(regs_backup));
+    memcpy(&regs, regs_backup, sizeof(struct REG_TYPE));
 
     // get executable section large enough for our injected code
     if(!rvm_a && _pt_getxzone(pid, &rvm_a, &rvm_l) < 0)
         return -1;
 
-    unsigned long align_size = rvm_a % 0x1000;
-
-    if (align_size)
-        rvm_a = rvm_a + 0x1000 - align_size;
-
     printf("> shellcode injection addr: 0x%lx size: 0x%lx (available: 0x%lx)\n", rvm_a, sc_len, rvm_l);
-
-    // attach process & wait for break
-    if(_ptrace(PTRACE_ATTACH, pid, NULL, NULL) < 0)
-        _pt_fail("> PTRACE_ATTACH error");
-    if(_wait4(pid, &s, WUNTRACED, NULL) != pid)
-        _pt_fail("> wait4(%d) error\n", pid);
-    printf("> success attaching to pid %d\n", pid);
-
-    // backup registers
-    if(_pt_getregs(pid, &regs))
-        return -1;
-    memcpy(&regs_backup, &regs, sizeof(struct REG_TYPE));
 
     // backup memory
     if(!(mem_backup = malloc(sc_len + sizeof(long))))
@@ -185,15 +204,19 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
 
     if(_pt_read(pid, (void*)rvm_a, mem_backup, sc_len) < 0)
         _pt_fail("> failed to read remote memory\n");
-    printf("> backed up mem & registers\n");
+
+    printf("> backed up memory\n");
 
     // inject shellcode
     if(_pt_write(pid, (void*)rvm_a, sc_buf, sc_len))
         return -1;
+
     printf("> injected shellcode at 0x%lx\n", rvm_a);
 
     // adjust PC / eip / rip to our injected code
+    regs.REG_ARG = (unsigned long)arg;
     regs.REG_PC = rvm_a + PC_OFF + start_offset;
+
     if(_pt_setregs(pid, &regs))
         return -1;
 
@@ -209,14 +232,14 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
         if(_wait4(pid, &s, 0, NULL) < 0 || WIFEXITED(s))
             _pt_fail("> wait4 error\n");
 
-        if (WSTOPSIG(s) == SIGSEGV)
-        {
-            printf("> segmentation fault\n");
-            break;
-        }
-
         if(_pt_getregs(pid, &regs))
             return -1;
+
+        if (WSTOPSIG(s) == SIGSEGV)
+        {
+            printf("> segmentation fault: %lx\n", regs.REG_PC);
+            break;
+        }
 
         if(regs.REG_SYSCALL == SYS_exit || regs.REG_SYSCALL == SYS_exit_group)
         {
@@ -230,13 +253,8 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
     // restore reg & mem backup
     if(_pt_write(pid, (void*)rvm_a, mem_backup, sc_len))
         return -1;
-    if(_pt_setregs(pid, &regs_backup))
-        return -1;
-    printf("> restored memory & registers\n");
 
-    // all done, detach now
-    if(_ptrace(PTRACE_DETACH, pid, NULL, NULL) < 0)
-        _pt_fail("> _pt_detach error\n");
+    printf("> restored memory\n");
 
     free(mem_backup);
 
@@ -244,58 +262,44 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
 }
 
 // inject returnable shellcode via ptrace into remote process, and get return code
-int pt_inject_returnable(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, void **result) {
+int pt_inject_returnable(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset,
+                         void * inj_address, void *arg, void **result, struct REG_TYPE *regs_backup) {
     struct REG_TYPE regs;
-    struct REG_TYPE regs_backup;
     struct REG_TYPE regs_finish;
-    unsigned long   rvm_a = 0;
+    unsigned long   rvm_a = (unsigned long)inj_address;
     size_t          rvm_l = sc_len;
     uint8_t *       mem_backup = NULL;
     int             s;
 
-    memset(&regs, 0, sizeof(regs));
-    memset(&regs_backup, 0, sizeof(regs_backup));
     memset(&regs_finish, 0, sizeof(regs_finish));
+    memcpy(&regs, regs_backup, sizeof(struct REG_TYPE));
 
-    // get executable section large enough for our injected code
-    if(_pt_getxzone(pid, &rvm_a, &rvm_l) < 0)
+    if(!rvm_a && _pt_getxzone(pid, &rvm_a, &rvm_l) < 0)
         return -1;
+
     printf("> shellcode injection addr: 0x%lx size: 0x%lx (available: 0x%lx)\n", rvm_a, sc_len, rvm_l);
 
-    // attach process & wait for break
-    if(_ptrace(PTRACE_ATTACH, pid, NULL, NULL) < 0)
-        _pt_fail("> PTRACE_ATTACH error");
-    if(_wait4(pid, &s, WUNTRACED, NULL) != pid)
-        _pt_fail("> wait4(%d) error\n", pid);
-    printf("> success attaching to pid %d\n", pid);
-
-    // backup registers
-    if(_pt_getregs(pid, &regs))
-        return -1;
-    memcpy(&regs_backup, &regs, sizeof(struct REG_TYPE));
-
-    // backup memory
     if(!(mem_backup = malloc(sc_len + sizeof(long))))
         _pt_fail("> malloc failed to allocate memory for remote mem backup\n");
 
     if(_pt_read(pid, (void*)rvm_a, mem_backup, sc_len) < 0)
         _pt_fail("> failed to read remote memory\n");
-    printf("> backed up mem & registers\n");
 
-    // inject shellcode
+    printf("> backed up memory\n");
+
     if(_pt_write(pid, (void*)rvm_a, sc_buf, sc_len))
         return -1;
+
     printf("> injected shellcode at 0x%lx\n", rvm_a);
 
-    // adjust PC / eip / rip to our injected code
+    regs.REG_ARG = (unsigned long)arg;
     regs.REG_PC = rvm_a + PC_OFF + start_offset;
+
     if(_pt_setregs(pid, &regs))
         return -1;
 
-    // execute code now
     printf("> running shellcode..\n");
 
-    // wait main function finish, get return code
     if(_ptrace(PTRACE_CONT, pid, NULL, NULL) < 0)
         _pt_fail("> PTRACE_SYSCALL error\n");
 
@@ -304,27 +308,24 @@ int pt_inject_returnable(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t star
 
     printf("> shellcode executed!\n");
 
-    if (WSTOPSIG(s) != SIGSEGV)
-    {
-        // get return code
-        if(_pt_getregs(pid, &regs_finish))
-            return -1;
-
-        *result = (void *)regs_finish.REG_AC;
-    }
-
-    // restore reg & mem backup
     if(_pt_write(pid, (void*)rvm_a, mem_backup, sc_len))
         return -1;
-    if(_pt_setregs(pid, &regs_backup))
-        return -1;
-    printf("> restored memory & registers\n");
 
-    // all done, detach now
-    if(_ptrace(PTRACE_DETACH, pid, NULL, NULL) < 0)
-        _pt_fail("> _pt_detach error\n");
+    printf("> restored memory\n");
 
     free(mem_backup);
+
+    // get return code
+    if(_pt_getregs(pid, &regs_finish))
+        return -1;
+
+    if (WSTOPSIG(s) == SIGSEGV)
+    {
+        printf("> segmentation fault: %lx\n", regs.REG_PC);
+        return -1;
+    }
+
+    *result = (void *)regs_finish.REG_AC;
 
     return 0;
 }

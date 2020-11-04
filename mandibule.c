@@ -85,21 +85,15 @@ void _main(unsigned long * sp)
     size_t          inj_opts    = mandibule_beg(0) - mandibule_beg(1);
     uint8_t *       inj_code    = malloc(inj_size);
 
-    void *          spread_addr   = (void*)spread_beg;
-    size_t          spread_size   = (size_t)spread_end - (size_t)spread_addr;
-    size_t          spread_off    = (size_t)slip_start - (size_t)spread_addr;
-    uint8_t *       spread_code   = malloc(spread_size);
-
     // parse arguments & build shared arguments struct
     args = _ashared_parse(ac, av);
     if(inj_opts < args->size_used)
         error("> shared arguments too big (%d/ max %d)\n", args->size_max, inj_opts);
 
     // prepare code that will be injected into the process
-    if(!inj_code || !spread_code)
+    if(!inj_code)
         error("> malloc for injected code failed\n");
 
-    memcpy(spread_code, spread_addr, spread_size);
     memcpy(inj_code, inj_addr, inj_size);
     memcpy(inj_code, args, args->size_used);
 
@@ -112,24 +106,48 @@ void _main(unsigned long * sp)
     }
     else
     {
-        void * result;
-        if(pt_inject_returnable(args->pid, spread_code, spread_size, spread_off, &result) < 0)
+        void * result = NULL;
+        unsigned long malloc_size = 0x10000;
+
+        struct REG_TYPE regs_backup = {};
+
+        if (pt_attach(args->pid, &regs_backup) < 0)
+            error("> failed to attach pid %d\n", args->pid);
+
+        if(pt_inject_returnable(args->pid, (void*)spread_beg, (size_t)(spread_end - spread_beg),
+                                (size_t)(spread_start - spread_beg), NULL, (void *)malloc_size, &result, &regs_backup) < 0)
+        {
+            pt_detach(args->pid, &regs_backup);
             error("> failed to inject shellcode into pid %d\n", args->pid);
+        }
 
         if (!result)
+        {
+            pt_detach(args->pid, &regs_backup);
             error("> failed to malloc heap\n");
+        }
 
-        printf("> malloc heap: %x\n", result);
+        printf("> malloc heap: 0x%x\n", result);
+
+        unsigned long inj_address = (unsigned long)result;
+
+        if (inj_address % PAGE_SIZE)
+            inj_address = inj_address + PAGE_SIZE - inj_address % PAGE_SIZE;
 
         // inject our own code into <pid> & execute code at <inj_off>
-        if(pt_inject(args->pid, inj_code, inj_size, inj_off, result) < 0)
+        if(pt_inject(args->pid, inj_code, inj_size, inj_off, (void *)inj_address, NULL, &regs_backup) < 0)
+        {
+            pt_detach(args->pid, &regs_backup);
             error("> failed to inject shellcode into pid %d\n", args->pid);
+        }
+
+        if (pt_detach(args->pid, &regs_backup) < 0)
+            error("> failed to detach pid %d\n", args->pid);
 
         printf("> successfully injected shellcode into pid %d\n", args->pid);
     }
 
     free(args);
-    free(spread_code);
     free(inj_code);
 
     _exit(0);
