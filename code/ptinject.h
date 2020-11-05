@@ -142,7 +142,8 @@ int _pt_cancel_syscall(int pid)
     if(_ptrace(PTRACE_SETREGSET, pid, (void*)NT_ARM_SYSTEM_CALL, &iov) < 0)
         _pt_fail("> PTRACE_SETREGSET NT_ARM_SYSTEM_CALL err\n");
 #else
-    _ptrace(PTRACE_POKEUSER, pid, (void *)(sizeof(unsigned long) * REG_SYS_NBR), (void *)-1);
+    if (_ptrace(PTRACE_POKEUSER, pid, (void *)(sizeof(unsigned long) * REG_SYS_NBR), (void *)-1) < 0)
+        _pt_fail("> PTRACE_POKEUSER err\n");
 #endif
     return 0;
 }
@@ -230,8 +231,6 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
     printf("> running shellcode..\n");
 
     // wait until the target process calls exit() / exit_group()
-    int syscall_exit = 0;
-
     while(1)
     {
         if(_ptrace(PTRACE_SYSCALL, pid, NULL, NULL) < 0)
@@ -249,16 +248,16 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
             break;
         }
 
+        if (regs.REG_SYSCALL == -1)
+        {
+            printf("> break exit syscall\n");
+            break;
+        }
+
         if(regs.REG_SYSCALL == SYS_exit || regs.REG_SYSCALL == SYS_exit_group)
         {
-            if (!syscall_exit)
-            {
-                syscall_exit = 1;
-                _pt_cancel_syscall(pid);
-                continue;
-            }
-
-            break;
+            printf("> cancel exit syscall\n");
+            _pt_cancel_syscall(pid);
         }
     }
 
