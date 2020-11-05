@@ -12,6 +12,7 @@
 #define _PTRACE_H
 
 #include <asm/ptrace.h>
+#include <sys/reg.h>
 #include <sys/user.h>
 #include <sys/uio.h>
 #include <sys/signal.h>
@@ -25,6 +26,7 @@
     #define REG_AC      eax
     #define PC_OFF      2
     #define REG_SYSCALL orig_eax
+    #define REG_SYS_NBR ORIG_EAX
 
 #elif defined(__x86_64__)
     #define REG_TYPE    user_regs_struct
@@ -33,6 +35,7 @@
     #define REG_ARG     rdi
     #define PC_OFF      2
     #define REG_SYSCALL orig_rax
+    #define REG_SYS_NBR ORIG_RAX
 
 #elif defined(__arm__)
     #define REG_TYPE    user_regs
@@ -139,7 +142,7 @@ int _pt_cancel_syscall(int pid)
     if(_ptrace(PTRACE_SETREGSET, pid, (void*)NT_ARM_SYSTEM_CALL, &iov) < 0)
         _pt_fail("> PTRACE_SETREGSET NT_ARM_SYSTEM_CALL err\n");
 #else
-    // nothing specific to do on x86 & amd64
+    _ptrace(PTRACE_POKEUSER, pid, (void *)(sizeof(unsigned long) * REG_SYS_NBR), (void *)-1);
 #endif
     return 0;
 }
@@ -214,6 +217,9 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
     printf("> injected shellcode at 0x%lx\n", rvm_a);
 
     // adjust PC / eip / rip to our injected code
+    // pass parameters through rdi registers, only on x64 architecture
+    // use on other architectures should modify the code
+    // for example, on x86, you need to manually push parameters into the stack
     regs.REG_ARG = (unsigned long)arg;
     regs.REG_PC = rvm_a + PC_OFF + start_offset;
 
@@ -224,6 +230,8 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
     printf("> running shellcode..\n");
 
     // wait until the target process calls exit() / exit_group()
+    int syscall_exit = 0;
+
     while(1)
     {
         if(_ptrace(PTRACE_SYSCALL, pid, NULL, NULL) < 0)
@@ -243,7 +251,13 @@ int pt_inject(pid_t pid, uint8_t * sc_buf, size_t sc_len, size_t start_offset, v
 
         if(regs.REG_SYSCALL == SYS_exit || regs.REG_SYSCALL == SYS_exit_group)
         {
-            _pt_cancel_syscall(pid);
+            if (!syscall_exit)
+            {
+                syscall_exit = 1;
+                _pt_cancel_syscall(pid);
+                continue;
+            }
+
             break;
         }
     }
