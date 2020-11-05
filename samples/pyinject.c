@@ -17,6 +17,9 @@ int main(int ac, char ** av, char ** env) {
         return 0;
     }
 
+    const char *command = av[1];
+    printf("> run python command: %s\n", command);
+
     int fd = _open("/proc/self/exe", O_RDONLY, 0);
 
     if (fd < 0)
@@ -139,7 +142,7 @@ int main(int ac, char ** av, char ** env) {
 
     if (PyGILState_Ensure && PyRun_SimpleString && PyGILState_Release) {
         int state = PyGILState_Ensure();
-        PyRun_SimpleString(av[1]);
+        PyRun_SimpleString(command);
         PyGILState_Release(state);
     }
 

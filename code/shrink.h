@@ -19,7 +19,7 @@ static inline void free_inline(void * ptr)
     _munmap_inline(page, IXTY_SIZE_ALLOC(ptr));
 }
 
-// malloc memory in remote process
+// free memory in remote process
 void shrink_main(void *ptr)
 {
     free_inline(ptr);
