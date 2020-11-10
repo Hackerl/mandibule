@@ -23,6 +23,13 @@ make
 ```
 
 
+## new feature
+- support containers
+- shellcode for malloc/free memory in remote process
+- fix memory leak bug
+- python inject sample like "pyrasite/pylane"
+- fake stack aligned 16-byte
+
 ## usage
 ```shell
 usage: ./mandibule <elf> [-a arg]* [-e env]* [-m addr] <pid>
@@ -53,44 +60,65 @@ $ ./target
 
 # in shell 2
 $ ./mandibule ./toinject `pidof target`
-> target pid: 6266
+> target pid: 2255143
 > arg[0]: ./toinject
 > args size: 51
-> shellcode injection addr: 0x7f0f4719c000 size: 0x5000 (available: 0x195000)
-> success attaching to pid 6266
-> backed up mem & registers
-> injected shellcode at 0x7f0f4719c000
+> set namespace pid: 2255143
+> success attaching to pid 2255143
+> backed up registers
+> shellcode injection addr: 0x563786d75000 size: 0x1ea (available: 0x1000)
+> backed up memory
+> injected shellcode at 0x563786d75000
 > running shellcode..
 > shellcode executed!
-> restored memory & registers
-> successfully injected shellcode into pid 6266
+> restored memory
+> malloc heap: 0x7f81d388c010
+> shellcode injection addr: 0x7f81d388d000 size: 0x6000 (available: 0x6000)
+> backed up memory
+> injected shellcode at 0x7f81d388d000
+> running shellcode..
+> cancel exit syscall
+> break exit syscall
+> shellcode executed!
+> restored memory
+> free heap: 0x7f81d388c010
+> shellcode injection addr: 0x563786d75000 size: 0xc9 (available: 0x1000)
+> backed up memory
+> injected shellcode at 0x563786d75000
+> running shellcode..
+> shellcode executed!
+> restored memory
+> restored registers
+> success detach from pid 2255143
+> successfully injected shellcode into pid 22551436
 
 # back to shell 1
 ...
-> target pid: 6266
 > arg[0]: ./toinject
 > args size: 51
-> auxv len: 304
-> auto-detected manual mapping address 0x55f6e1000000
-> mapping './toinject' into memory at 0x55f6e1000000
+> auxv len: 320
+> auto-detected manual mapping address 0x563788000000
+> mapping './toinject' into memory at 0x563788000000
 > reading elf file './toinject'
-> loading elf at: 0x55f6e1000000
-> load segment addr 0x55f6e1000000 len 0x1000 => 0x55f6e1000000
-> load segment addr 0x55f6e1200dd8 len 0x1000 => 0x55f6e1200000
-> max vaddr 0x55f6e1212000
+> loading elf at: 0x563788000000
+> load segment addr 0x563788000000 len 0x1000 => 0x563788000000
+> load segment addr 0x563788200dd8 len 0x1000 => 0x563788200000
+> max vaddr 0x563788212000
 > loading interp '/lib64/ld-linux-x86-64.so.2'
 > reading elf file '/lib64/ld-linux-x86-64.so.2'
-> loading elf at: 0x55f6e1212000
-> load segment addr 0x55f6e1212000 len 0x23000 => 0x55f6e1212000
-> load segment addr 0x55f6e1435bc0 len 0x2000 => 0x55f6e1435000
-> max vaddr 0x55f6e1448000
-> eop 0x55f6e1212c20
+> loading elf at: 0x563788212000
+> load segment addr 0x563788212000 len 0x23000 => 0x563788212000
+> load segment addr 0x563788435bc0 len 0x2000 => 0x563788435000
+> max vaddr 0x563788448000
+> eop 0x563788212c20
 > setting auxv
-> set auxv[3] to 0x55f6e1000040
+> set auxv[3] to 0x563788000040
 > set auxv[5] to 0x9
-> set auxv[9] to 0x55f6e10006e0
-> set auxv[7] to 0x55f6e1000000
-> eop 0x55f6e1212c20
+> set auxv[9] to 0x5637880006a0
+> set auxv[7] to 0x563788000000
+> eop 0x563788212c20
+> align stack ptr: 7ffd1ee72888
+> stack ptr: 7ffd1ee72880
 > starting ...
 
 # oh hai from pid 6266
@@ -112,13 +140,17 @@ This way we can copy mandibule's code into any process and it will be able to ru
 
 Here is how mandibule works:
 
-- find an executable section in target process with enough space (~5Kb)
+- find an executable section in target process with enough space (~500b)
 - attach to process with ptrace
 - backup register state
 - backup executable section
-- inject mandibule code into executable section
+- inject malloc shellcode into executable section
+- malloc enough space in remote process for inject mandibule
+- inject mandibule code into memory allocated in the previous step
 - let the execution resume on our own injected code
 - wait until exit() is called by the remote process
+- inject free shellcode into executable section
+- free previously allocated memory
 - restore registers & memory
 - detach from process
 
