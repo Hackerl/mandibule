@@ -29,6 +29,7 @@ unsigned long mandibule_beg(int aligned)
 #include "shargs.h"
 #include "spread.h"
 #include "shrink.h"
+#include "container.h"
 
 // forward declarations
 unsigned long mandibule_end(void);
@@ -98,6 +99,13 @@ void _main(unsigned long * sp)
     memcpy(inj_code, inj_addr, inj_size);
     memcpy(inj_code, args, args->size_used);
 
+    int ns_pid = 0;
+    if (get_namespace_pid((int)args->pid, &ns_pid) == 0 && ns_pid != 0)
+    {
+        printf("> set namespace pid: %d\n", ns_pid);
+        ((ashared_t *)inj_code)->pid = ns_pid;
+    }
+
     // self injection test
     if(args->pid == 0)
     {
@@ -142,14 +150,14 @@ void _main(unsigned long * sp)
             error("> failed to inject shellcode into pid %d\n", args->pid);
         }
 
+        printf("> free heap: 0x%x\n", result);
+
         if(pt_inject_returnable(args->pid, (void*)shrink_beg, (size_t)(shrink_end - shrink_beg),
                                 (size_t)(shrink_start - shrink_beg), NULL, result, NULL, &regs_backup) < 0)
         {
             pt_detach(args->pid, &regs_backup);
             error("> failed to free heap");
         }
-
-        printf("> free heap: 0x%x\n", result);
 
         if (pt_detach(args->pid, &regs_backup) < 0)
             error("> failed to detach pid %d\n", args->pid);
